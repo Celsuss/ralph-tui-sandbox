@@ -28,7 +28,19 @@ Host (Arch Linux)
 
 ### Base Image
 
-`oven/bun:latest` (Debian-based). Required because ralph-tui depends on Bun's native features (OpenTUI).
+`docker.io/oven/bun:latest` (Debian-based). Required because ralph-tui depends on Bun's native features (OpenTUI).
+
+### Container User
+
+The image creates a non-root user to work correctly with `--userns=keep-id`. Build args control the user identity:
+
+| Build Arg | Default | Purpose |
+|---|---|---|
+| `USERNAME` | `coder` | Container username |
+| `USER_UID` | `1000` | User UID (should match host UID) |
+| `USER_GID` | `1000` | User GID (should match host GID) |
+
+The justfile automatically passes the host user's UID/GID via `id -u` / `id -g`. All user-space installs (Rust, bun globals) run as this user so they are accessible at runtime with `--userns=keep-id`.
 
 ### Installed Software
 
@@ -79,18 +91,18 @@ Use `--userns=keep-id` to map the host user's UID/GID into the container. Files 
 | Host Path | Container Path | Mode | Purpose |
 |---|---|---|---|
 | `<project-dir>` (argument) | `/workspace` | `rw` | Working directory |
-| `~/.ssh` | `/home/$USER/.ssh` | `ro` | SSH keys for git/jj |
-| `~/.gnupg` | `/home/$USER/.gnupg` | `ro` | GPG keys for signing |
-| `~/.config/jj` | `/home/$USER/.config/jj` | `ro` | jj configuration |
+| `~/.ssh` | `/home/coder/.ssh` | `ro` | SSH keys for git/jj |
+| `~/.gnupg` | `/home/coder/.gnupg` | `ro` | GPG keys for signing |
+| `~/.config/jj` | `/home/coder/.config/jj` | `ro` | jj configuration |
 
 ### Named Volumes
 
 | Volume Name | Container Path | Purpose |
 |---|---|---|
-| `claude-data` | `/home/$USER/.claude` | Auth tokens, conversation history, config |
+| `claude-data` | `/home/coder/.claude` | Auth tokens, conversation history, config |
 | `apt-cache` | `/var/cache/apt` | Persist apt package cache across rebuilds |
-| `bun-cache` | `/home/$USER/.bun` | Persist bun global packages installed at runtime |
-| `cargo-registry` | `/home/$USER/.cargo/registry` | Persist downloaded crate sources |
+| `bun-cache` | `/home/coder/.bun` | Persist bun global packages installed at runtime |
+| `cargo-registry` | `/home/coder/.cargo/registry` | Persist downloaded crate sources |
 
 ### Security
 
@@ -123,10 +135,14 @@ Lives in the repo root. Recipes:
 
 ### `just build`
 
-Build the container image:
+Build the container image (passes host UID/GID as build args):
 
 ```
-podman build -t ralph-tui-sandbox .
+podman build \
+  --build-arg USERNAME=coder \
+  --build-arg USER_UID=$(id -u) \
+  --build-arg USER_GID=$(id -g) \
+  -t ralph-tui-sandbox .
 ```
 
 ### `just run <project-dir>`
@@ -137,15 +153,17 @@ Run the container with a project directory mounted:
 podman run -it --rm \
   --userns=keep-id \
   -v <project-dir>:/workspace:rw \
-  -v ~/.ssh:/home/$USER/.ssh:ro \
-  -v ~/.gnupg:/home/$USER/.gnupg:ro \
-  -v ~/.config/jj:/home/$USER/.config/jj:ro \
-  -v claude-data:/home/$USER/.claude \
+  -v ~/.ssh:/home/coder/.ssh:ro \
+  -v ~/.gnupg:/home/coder/.gnupg:ro \
+  -v ~/.config/jj:/home/coder/.config/jj:ro \
+  -v claude-data:/home/coder/.claude \
   -v apt-cache:/var/cache/apt \
-  -v bun-cache:/home/$USER/.bun \
-  -v cargo-registry:/home/$USER/.cargo/registry \
+  -v bun-cache:/home/coder/.bun \
+  -v cargo-registry:/home/coder/.cargo/registry \
   ralph-tui-sandbox
 ```
+
+The `coder` username in mount paths matches the `USERNAME` build arg (default: `coder`).
 
 ### `just login`
 
@@ -155,7 +173,7 @@ Run the container with host networking to complete Claude Code OAuth:
 podman run -it --rm \
   --userns=keep-id \
   --network=host \
-  -v claude-data:/home/$USER/.claude \
+  -v claude-data:/home/coder/.claude \
   ralph-tui-sandbox \
   claude login
 ```
@@ -170,7 +188,7 @@ Drop into a bash shell inside the container (for debugging):
 podman run -it --rm \
   --userns=keep-id \
   -v <project-dir>:/workspace:rw \
-  -v claude-data:/home/$USER/.claude \
+  -v claude-data:/home/coder/.claude \
   ralph-tui-sandbox \
   /bin/bash
 ```
