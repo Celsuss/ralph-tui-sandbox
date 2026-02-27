@@ -40,6 +40,9 @@ shell project-dir:
       ralph-tui-sandbox \
       /bin/bash
 
+test:
+    bash test.sh
+
 clean:
     podman rmi ralph-tui-sandbox
     podman volume rm claude-data apt-cache bun-cache cargo-registry

@@ -193,6 +193,16 @@ podman run -it --rm \
   /bin/bash
 ```
 
+### `just test`
+
+Run the automated test suite (`test.sh`) to verify the container:
+
+```
+just test
+```
+
+See [Testing](#testing) for details on what is covered.
+
 ### `just clean`
 
 Remove the image and named volumes:
@@ -201,6 +211,32 @@ Remove the image and named volumes:
 podman rmi ralph-tui-sandbox
 podman volume rm claude-data apt-cache bun-cache cargo-registry
 ```
+
+## Testing
+
+An automated test script (`test.sh`) validates the container against this spec. Run it via `just test` (builds the image first if needed).
+
+### Automated checks
+
+| Area | What is verified |
+|---|---|
+| Build | Image builds without errors and appears in `podman images` |
+| User identity | `whoami` returns `coder`, UID/GID match the host user |
+| Installed software | All 20 tools from the spec respond with a version string (jj pinned to 0.38.0) |
+| Working directory | `pwd` is `/workspace`, files created inside are visible on the host with correct ownership (`--userns=keep-id`) |
+| Read-only mounts | `~/.ssh`, `~/.gnupg`, `~/.config/jj` are mounted and not writable (skipped if dirs don't exist on host) |
+| Named volumes | Data written to `~/.claude` persists across container runs |
+| Network access | Outbound HTTPS works (curl to `api.anthropic.com`) |
+| Entrypoint | Image entrypoint is `ralph-tui` |
+| Security | `podman`/`docker` commands fail inside the container; host home directory is not accessible |
+
+### Manual checks
+
+Some tests require interactive verification and are skipped by the script:
+
+- **`just login`** — Claude Code OAuth flow requires a browser. Verify the login prompt appears and auth tokens persist in the `claude-data` volume.
+- **`just run <project-dir>`** — Verify ralph-tui starts as the entrypoint and the container stops when ralph-tui exits.
+- **`just clean`** — Verify the image and all four named volumes are removed. Skipped in automated tests to preserve the image.
 
 ## Known Limitations & Future Considerations
 
